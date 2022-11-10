@@ -7,6 +7,11 @@ Alternatively, each step can be run separately.
 
 ![schematic](https://github.com/staciawyman/blender/blob/master/BLENDER_schematic.png)
 
+## Requirements
+Parallel::ForkManager	https://metacpan.org/pod/Parallel::ForkManager
+sambamba	https://lomereiter.github.io/sambamba/
+samtools	http://www.htslib.org/
+
 ## Running the bash script:
 
         sh run_blender.sh <path to reference genome> \
@@ -46,11 +51,15 @@ BLENDER can be run with or without being piped through the filtering script. The
 
 ## Options:
 
-**-p**	List of 2 nucleotide PAM sequences, separated by commas, in quotes. The default is "GG,AG".
+`-p`	List of 2 nucleotide PAM sequences, separated by commas, in quotes. The default is "GG,AG".
 
-**-c**	Cutoff threshold for number of read ends at a putative cut site. Default is 3. For maximum sensitivity, this can be set to 2 and the filtering scheme applied. BEWARE that this dramatically slows down running time. It can increase runtime from ~30min to 24hrs, depending on the guide.
+`-c`	Cutoff threshold for number of read ends at a putative cut site. Default is 3. For maximum sensitivity, this can be set to 2 and the filtering scheme applied. BEWARE that this dramatically slows down running time. It can 
+increase runtime from ~30min to 24hrs, depending on the guide.
 
-**--verbose** This flag will turn on output of filtered out candidates while running if filtered out for more than maximum mismatches (8) in the guide sequence, or the hit occurs in a blacklist region or it is in a very deep region and thus likely an artifact.
+`-j` Number of threads to use (default 1, ideally equal to or higher than the number of chromosomes in the target genome))
+
+`--verbose` This flag will turn on output of filtered out candidates while running if filtered out for more than maximum mismatches (8) in the guide sequence, or the hit occurs in a blacklist region or it is in a very deep region and 
+thus likely an artifact.
 
 
 ## Output:
