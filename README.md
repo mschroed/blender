@@ -9,7 +9,9 @@ Alternatively, each step can be run separately.
 
 ## Requirements
 Parallel::ForkManager	https://metacpan.org/pod/Parallel::ForkManager
+
 sambamba	https://lomereiter.github.io/sambamba/
+
 samtools	http://www.htslib.org/
 
 ## Running the bash script:
