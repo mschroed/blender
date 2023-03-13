@@ -11,7 +11,7 @@ from operator import itemgetter
 boxWidth = 10
 box_size = 16
 
-colors = {'G': '#F5F500', 'A': '#FF5454', 'T': '#00D118', 'C': '#26A8FF', 'N': '#B3B3B3'}
+colors = {'G': '#F5F500', 'A': '#FF5454', 'T': '#00D118', 'C': '#26A8FF', 'N': '#B3B3B3', 'R': '#FFA500'}
 
 
 # Read in filtered off-target list, grab relevant columns, sort by disco score, then mismatches, 
@@ -43,10 +43,6 @@ def parseSitesFile(infile):
 
 def visualizeOfftargets(infile, outfile, target_guide, title=None):
 
-    output_folder = os.path.dirname(outfile)
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
-
     # Get offtargets array from file
     offtargets  = parseSitesFile(infile)
 
@@ -71,7 +67,10 @@ def visualizeOfftargets(infile, outfile, target_guide, title=None):
     # Draw reference sequence row
     for i, c in enumerate(target_guide):
         y = y_offset
-        x = x_offset + i * box_size
+        if i < 20:
+            x = x_offset + i * box_size
+        else:
+            x = x_offset + i * box_size + box_size/5
         dwg.add(dwg.rect((x, y), (box_size, box_size), fill=colors[c]))
         dwg.add(dwg.text(c, insert=(x + 3, y + box_size - 3), fill='black', style="font-size:15px; font-family:Courier"))
 
@@ -86,7 +85,10 @@ def visualizeOfftargets(infile, outfile, target_guide, title=None):
     for j, seq in enumerate(offtargets):
         y = y_offset + j * box_size
         for i, c in enumerate(seq['seq']):
-            x = x_offset + i * box_size
+            if i < 20:
+                x = x_offset + i * box_size
+            else:
+                x = x_offset + i * box_size + box_size/5
             if c == target_guide[i] or target_guide[i] == 'N':
                 dwg.add(dwg.text(u"\u2022", insert=(x + 4.5, 2 * box_size + y - 4), fill='black', style="font-size:10px; font-family:Courier"))
             else:
