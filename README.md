@@ -6,32 +6,71 @@ BLENDER is a companion program to the DISCOVER-Seq assay to identify off-target 
 ![schematic](https://github.com/cornlab/blender/blob/master/BLENDER_schematic.png?raw=true)
 
 As of March 2023, there are [two versions of BLENDER.](#blender-versions)
-* "Classic" BLENDER (aka ["BLENDER"](#blender-aka-blenderpl)) is the original software reported in [Wienert and Wyman et al Science 2019.](https://pubmed.ncbi.nlm.nih.gov/31000663/) It is battle-tested but is quite slow. A single run can take 1-2 days on a single CPU, depending on sequencing depth. It is also very hard to develop against, and so new features have lagged behind. BLENDER is provided so that one can compare to historical datasets/results.
 * "New" BLENDER (aka ["BLENDER2"](#blender2-aka-blender2py)) uses the same logic as classic BLENDER, but has been rewritten to be much faster and easier to develop against. BLENDER2 will replace BLENDER for all future uses of DISCOVER-seq. Stay tuned for several updates to BLENDER2!
+* "Classic" BLENDER (aka ["BLENDER"](#blender-aka-blenderpl)) is the original software reported in [Wienert and Wyman et al Science 2019.](https://pubmed.ncbi.nlm.nih.gov/31000663/) It is battle-tested but is quite slow. A single run can take 1-2 days on a single CPU, depending on sequencing depth. It is also very hard to develop against, and so new features have lagged behind. BLENDER is provided so that one can compare to historical datasets/results.
 
 ## Running BLENDER
 BLENDER has a driver script run_blender.sh that takes several argmuments and runs identification of putative hits, filtering of those hits, and then creates an SVG of the aligned hits. Files are stored in the output directory given as a parameter to the bash script.
 Alternatively, each step can be run separately. 
 
-## Automated bash script
+## Automated bash scripts
+### [New blender](#blender2-aka-blender2py)
+        sh run_blender2.sh <path to reference genome> \
+            <path to IP bamfile> \
+            <path to control bamfile> \
+            <guide sequence> <output directory> ["options"]
 ### [Classic blender](#blender-aka-blenderpl)
         sh run_blender.sh <path to reference genome> \
             <path to IP bamfile> \
             <path to control bamfile> \
             <guide sequence> <output directory> ["options"]
 
-### [New blender](#blender2-aka-blender2py)
-        sh run_blender2.sh <path to reference genome> \
-            <path to IP bamfile> \
-            <path to control bamfile> \
-            <guide sequence> <output directory> ["options"]
-
-This will run blender with option c set to 3 (details below), this means the program will run quickly, but may miss some very sparsely covered off target sites. I recommend running it initially with c set to 3 (the default) and then running again with c set to 2. Classic blender may take several days to run, but new blender should complete relatively quickly.
+These will run blender with option c set to 3 (details below), this means the program will run quickly, but may miss some very sparsely covered off target sites. I recommend running it initially with c set to 3 (the default) and then running again with c set to 2. Classic blender may take several days to run, but new blender should complete relatively quickly.
 
 # Blender versions
 There are two major versions of blender:
-* blender.pl: This version was originally published in Wienert & Wyman et al Science 2019. It is  very slow, but has been extensively benchmarked. A single-CPU run can take as long as 1 day to complete and the newer multi-CPU mode can reduce this to 1 hour or so if you have many CPUs. It only works with blunt-cutting Cas enzymes that have a cutsite and PAM location identical to SpyCas9.
 * blender2.py: This uses the same logic as blender.pl, but is rewritten to be more flexible and have a much faster backend. It takes approximately one minute for a typical run to complete. It finds the same sites as blender.pl, but with very slight changes to the score. The Corn Lab has switched to using blender2.py, and this version will be the one developed against for all future versions.
+* blender.pl: This version was originally published in Wienert & Wyman et al Science 2019. It is  very slow, but has been extensively benchmarked. A single-CPU run can take as long as 1 day to complete and the newer multi-CPU mode can reduce this to 1 hour or so if you have many CPUs. It only works with blunt-cutting Cas enzymes that have a cutsite and PAM location identical to SpyCas9.
+
+# BLENDER2 aka blender2.py
+Faster, more flexible, less tested
+## Requirements
+pysam https://pysam.readthedocs.io/en/latest/installation.html (best installed via conda)
+
+## To run the blender script directly:
+
+        python blender.py -f <experimental bamfile> -c <control bamfile> -g <guide sequence> -r <reference genome> -b hg38.blacklist.bed > unfiltered_output.txt
+
+        python blender.py -f <experimental bamfile> -c <control bamfile> -g <guide sequence> -r <reference genome> -b hg38.blacklist.bed  | perl filter.pl > output.txt
+
+BLENDER can be run with or without being piped through the filtering script. There are two filtering scripts provided; the standard filter.pl script that implements the standard scoring scheme, and the filter_pool.pl script that implements the more stringent scoring scheme for pooled samples.
+<CENTER>
+
+![scoring scheme](https://github.com/cornlab/blender/blob/master/scoring_scheme.png?raw=true)
+
+</CENTER>
+
+## Input & Options
+`-f` `--file`           Experimental bamfile (required). This is the aligned bamfile for the MRE11 pulldown of ChIP-Seq of a Cas9 edited sample. BLENDER will extract the reference sequence fromthis file for use in the analysis. I typically use BWA for alignment, but bowtie2 can be used as well. BLENDER has not been tested with bamfiles from other aligners.  **Required.**
+
+`-c` `--control`        Control bamfile. This is a ChIP-Seq for MRE11 pulldown from either unedited cells or cells that have been edited with a non-targeting gRNA. If there are greater than 10 reads in the control sample, the hit in the edited sample is filtered out.
+
+`-g` `--guide`          Guide sequence. Should be provided 5'-> 3' without the PAM sequence. **Required.**
+
+`-p` `--pams`           List of 2 nucleotide PAM sequences with *spaces* between them. The default is `GG AG`.
+
+`-r` `--reference`      Reference genome in FASTA format. Must be pre-indexed with `faidx` so that an accompanying `*.fai` is found in the same directory as the FASTA-formatted genome.  **Required.**
+
+`-t` `--threshold`      Threshold for number of read ends exactly at a putative cut site. Default is 3. For maximum sensitivity, this can be set to 2 and the filtering scheme applied. **Note that this was formerly option `-c` in blender.pl, but is now `-t` to avoid confusion with the control BAM file!**
+
+`-s` `--score_min`      Minimum aggregated score across a 5-base window around the cutsite to consider a hit (default 3)
+
+`-m` `--max_mismatches` Maximum number of mismatches to allow to the guide sequence (default 8)
+
+`-b` `--blacklist`      Blacklist to use for filtering hits, e.g. from ENCODE (BED format)
+
+`--verbose`             This flag will turn on output of filtered out candidates while running if filtered out for more than maximum mismatches (8) in the guide sequence, or the hit occurs in a blacklist region or it is in a very deep region and 
+thus likely an artifact.
 
 # BLENDER aka blender.pl 
 Older, much slower, more tested
@@ -79,47 +118,6 @@ increase runtime from ~30min to 24hrs, depending on the guide.
 `-j` Number of threads to use (default 1, ideally equal to or higher than the number of chromosomes in the target genome))
 
 `--verbose` This flag will turn on output of filtered out candidates while running if filtered out for more than maximum mismatches (8) in the guide sequence, or the hit occurs in a blacklist region or it is in a very deep region and 
-thus likely an artifact.
-
-# BLENDER2 aka blender2.py
-Faster, more flexible, less tested
-## Requirements
-pysam https://pysam.readthedocs.io/en/latest/installation.html (best installed via conda)
-
-## To run the blender script directly:
-
-        python blender.py -f <experimental bamfile> -c <control bamfile> -g <guide sequence> -r <reference genome> -b hg38.blacklist.bed > unfiltered_output.txt
-
-        python blender.py -f <experimental bamfile> -c <control bamfile> -g <guide sequence> -r <reference genome> -b hg38.blacklist.bed  | perl filter.pl > output.txt
-
-BLENDER can be run with or without being piped through the filtering script. There are two filtering scripts provided; the standard filter.pl script that implements the standard scoring scheme, and the filter_pool.pl script that implements the more stringent scoring scheme for pooled samples.
-<CENTER>
-
-![scoring scheme](https://github.com/cornlab/blender/blob/master/scoring_scheme.png?raw=true)
-
-</CENTER>
-
-
-## Input & Options
-`-f` `--file`           Experimental bamfile (required). This is the aligned bamfile for the MRE11 pulldown of ChIP-Seq of a Cas9 edited sample. BLENDER will extract the reference sequence fromthis file for use in the analysis. I typically use BWA for alignment, but bowtie2 can be used as well. BLENDER has not been tested with bamfiles from other aligners.  **Required.**
-
-`-c` `--control`        Control bamfile. This is a ChIP-Seq for MRE11 pulldown from either unedited cells or cells that have been edited with a non-targeting gRNA. If there are greater than 10 reads in the control sample, the hit in the edited sample is filtered out.
-
-`-g` `--guide`          Guide sequence. Should be provided 5'-> 3' without the PAM sequence. **Required.**
-
-`-p` `--pams`           List of 2 nucleotide PAM sequences with *spaces* between them. The default is `GG AG`.
-
-`-r` `--reference`      Reference genome in FASTA format. Must be pre-indexed with `faidx` so that an accompanying `*.fai` is found in the same directory as the FASTA-formatted genome.  **Required.**
-
-`-t` `--threshold`      Threshold for number of read ends exactly at a putative cut site. Default is 3. For maximum sensitivity, this can be set to 2 and the filtering scheme applied. **Note that this was formerly option `-c` in blender.pl, but is now `-t` to avoid confusion with the control BAM file!**
-
-`-s` `--score_min`      Minimum aggregated score across a 5-base window around the cutsite to consider a hit (default 3)
-
-`-m` `--max_mismatches` Maximum number of mismatches to allow to the guide sequence (default 8)
-
-`-b` `--blacklist`      Blacklist to use for filtering hits, e.g. from ENCODE (BED format)
-
-`--verbose`             This flag will turn on output of filtered out candidates while running if filtered out for more than maximum mismatches (8) in the guide sequence, or the hit occurs in a blacklist region or it is in a very deep region and 
 thus likely an artifact.
 
 # Output
