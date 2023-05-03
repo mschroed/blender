@@ -10,6 +10,7 @@ def parse_arguments():
         prog="autoBLENDER",
         description = "find Cas on- and off-targets using AutoDisco")
     parser.add_argument('-f', '--file', required=True, help='experimental BAM (required)')
+    parser.add_argument('-n', '--nuclease', required=True, default="SpyCas9", help='Type of nuclease used [SpyCas9, Cas12a, ...] (required)')
     parser.add_argument('-c', '--control', help='control BAM (optional, but highly recommended)')
     parser.add_argument('-g', '--guide', required=True, help="on-target guide RNA sequence, provided 5'-3' without the PAM sequence")
     parser.add_argument('-t', '--threshold', type=int, default=3, help='Number of reads to consider for threshold (dfault 3)')
@@ -22,6 +23,75 @@ def parse_arguments():
     parser.add_argument('--debug', action='store_true', default=False, help='debug output')
     args = parser.parse_args()
     return args
+
+# Chr:Start-End
+# Cutsite
+# Discoscore
+# Cutsite Ends
+# Strand
+# PAM
+# Guide sequence
+# Mismatches
+class Nuclease:
+    def __init__(self, protospacer, max_mismatches, name=None):
+        self._protospacer = protospacer
+        self._max_mismatches = max_mismatches
+        self._name = name
+    @property
+    def pams(self):
+        return self._pams
+    @pams.setter
+    def pams(self, value):
+        self._pams = value
+    def protospacer_length(self):
+        return len(self._protospacer)
+    @property
+    def protospacer(self):
+        return self._protospacer
+    @protospacer.setter
+    def protospacer(self, value):
+        self._protospacer = value
+    @property
+    def max_mismatches(self):
+        return self._max_mismatches
+    @max_mismatches.setter
+    def max_mismatches(self, value):
+        self._max_mismatches = value
+    @property
+    def window_size(self):
+        return self._window_size
+    @property
+    def s_e_pamleft(self):
+        return self._s_e_pamleft
+    @property
+    def s_e_pamright(self):
+        return self._s_e_pamright
+    @property
+    def pam_loc(self):
+        return self._pam_loc
+    @property
+    def pam_len(self):
+        return self._pam_len
+
+class SpyCas9(Nuclease):
+    def __init__(self, protospacer, max_mismatches, name=None):
+        #super().__init__(protospacer, strand, score, mismatches, name)
+        self.name = "SpyCas9"
+        self._protospacer = protospacer
+        self._max_mismatches = max_mismatches
+        self._pams = ("GG","AG")
+        self._window_size = 5 # set window_size for sum_windows function
+        self._s_e_pamleft = [2,17]
+        self._s_e_pamright = [3,16]
+        self._pam_loc = 5
+        self._pam_len = 2
+
+
+class Cas12a(Nuclease):
+    def __init__(self, protospacer, max_mismatches, name=None):
+        self.name = "Cas12a"
+
+    pass
 
 def check_read(read, min_MQ=25):
     if read.is_unmapped:
@@ -65,15 +135,15 @@ def combine_starts(for_starts, rev_starts, threshold):
             both_starts[start] = both
     return both_starts
 
-def get_pam(chromosome, location, direction, fastaref):
+def get_pam(chromosome, location, direction, fastaref, nuc_info):
     ref_pam = ""
     s = None
     e = None
     if direction == "left":
-        s = location-5
+        s = location-nuc_info.pam_loc
     elif direction == "right":
-        s = location+5
-    e = s+2 # python closed end notation
+        s = location+nuc_info.pam_loc
+    e = s+nuc_info.pam_len # python closed end notation
     if s < 0:
         return
     ref_pam = fastaref.fetch(reference=chromosome, start=s, end=e).upper()
@@ -121,10 +191,21 @@ def get_blacklist(blacklist_fname):
     f.close()
     return blacklist
 
+def get_nuclease(nuclease_name, protospacer, max_mm):
+    match nuclease_name:
+        case 'SpyCas9':
+            return SpyCas9(protospacer, max_mm)
+        case 'Cas12a':
+            return Cas12a(protospacer, max_mm)
+        case other:
+            warnings.warn("Nuclease is not supported yet, exiting ...")
+            quit()
+
 if __name__ == '__main__':
     args = parse_arguments()
     edited_fname = args.file
     control_fname = args.control
+    nuclease = args.nuclease
     input_guide = args.guide
     pams = args.pams
     reference_fname = args.reference
@@ -139,6 +220,12 @@ if __name__ == '__main__':
         print (args)
     
     blacklist = get_blacklist(blacklist_fname)
+
+    #set data for specific nuclease
+    nuc_info = get_nuclease(nuclease, input_guide, max_mismatches)
+
+    #if pams == None:
+    #    pams = nuc_info.pams
 
     # Note that all output needs to be 1-offset to change from python 0-indexing to 1-indexing!    
     print("Chr:Start-End\tCutsite\tDiscoscore\tCutsite Ends\tStrand\tPAM\tGuide sequence\tMismatches")
@@ -208,7 +295,7 @@ if __name__ == '__main__':
                                 "\tFILTERED: deep area")
                     continue
 
-            score = sum_window(for_starts, rev_starts, start, window_size=5)
+            score = sum_window(for_starts, rev_starts, start, window_size=nuc_info.window_size)
             if score < score_min: # doesn't pass discover-score cutoff
                 if verbose: 
                         print(chromosome + ":" + "x" + "-" + "x" + "\t" +
@@ -218,14 +305,15 @@ if __name__ == '__main__':
                             "\tFILTERED:fails disco score " + str(score_min))
                 continue
 
-            pamleft = get_pam(chromosome, start, "left", reference_fasta)
-            pamright = get_pam(chromosome, start, "right", reference_fasta)
+            pamleft = get_pam(chromosome, start, "left", reference_fasta, nuc_info)
+            pamright = get_pam(chromosome, start, "right", reference_fasta, nuc_info)
             if debug:
                 print(chromosome, start, both_starts[start], pamleft, pamright, pams)
 
             if pamleft in pams:
-                s = start - 2
-                e = start + 17
+                s_e = nuc_info.s_e_pamleft
+                s = start - s_e[0]
+                e = start + s_e[1]
                 if e < 0 or s < 0: # too close to and end to be out sequence
                     continue
                 guide = get_sequence(chromosome, s, e, reference_fasta)
@@ -233,7 +321,7 @@ if __name__ == '__main__':
                 mm = n_mm(input_guide, guide)
                 if debug:
                     print(input_guide, guide, mm)
-                if mm > max_mismatches:
+                if mm > nuc_info.max_mismatches:
                     if verbose: 
                         print(chromosome + ":" + str(s+1) + "-" + str(e+1) + "\t" +
                             str(start+1) + "\t" +
@@ -248,15 +336,16 @@ if __name__ == '__main__':
                     output[chromosome+str(start)+guide] = outstr
 
             if pamright in pams:
-                e = start + 3
-                s = start - 16
+                s_e = nuc_info.s_e_pamright
+                e = start + s_e[0]
+                s = start - s_e[1]
                 if e < 0 or s < 0: # cannot be our sequence
                     continue
                 guide = get_sequence(chromosome, s, e, reference_fasta)
                 mm = n_mm(input_guide, guide)
                 if debug:
                     print(input_guide, guide, mm)
-                if mm > max_mismatches:
+                if mm > nuc_info.max_mismatches:
                     if verbose: 
                         print(chromosome + ":" + str(s+1) + "-" + str(e+1) + "\t" +
                         str(start+1) + "\t" +
